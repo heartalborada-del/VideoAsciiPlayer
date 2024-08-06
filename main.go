@@ -1,11 +1,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"image/png"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -15,21 +18,28 @@ import (
 )
 
 func main() {
-	term := terminal.NewTerminal()
-	if term.IsWindows() {
-		restoreConsole, err := termenv.EnableVirtualTerminalProcessing(termenv.DefaultOutput())
-		if err != nil {
-			panic(err)
-		}
-		defer restoreConsole()
+	var frameBufferSize = flag.Int("fs", 120, "The Size of frame buffer [Recommended above 120]")
+	var videoImgPath = flag.String("vp", "", "The Path of Stroage Video Every Frame Images")
+	var videoImgSize = flag.Int64("vs", -1, "The Count of Frame Image [From 0 to Your setting]")
+	var renderPoolSize = flag.Int("r", 16, "Render Pool Size")
+	var targetFramePreSecond = flag.Int("fps", 30, "Target FPS")
+	flag.Parse()
+	if *videoImgPath == "" || *videoImgSize <= 0 || *frameBufferSize <= 1 || *renderPoolSize <= 0 || *targetFramePreSecond <= 0 {
+		flag.PrintDefaults()
+		return
 	}
+	term := terminal.NewTerminal()
+	restoreConsole, err := termenv.EnableVirtualTerminalProcessing(termenv.DefaultOutput())
+	if err != nil {
+		panic(err)
+	}
+	defer restoreConsole()
 	w, h, _ := term.GetScreenSize()
-
 	var wg sync.WaitGroup
 	frameCh := make(chan struct {
 		index int
 		frame string
-	}, 120)
+	}, *frameBufferSize)
 	quitCh := make(chan struct{})
 	wg.Add(1)
 	go func() {
@@ -37,8 +47,8 @@ func main() {
 		frameMap := make(map[int]string)
 		nextFrame := 1
 		start := time.Now()
-		frameInterval := time.Second / 30
-		const offset time.Duration = time.Microsecond * 500 //500 us
+		frameInterval := time.Second / time.Duration(*targetFramePreSecond)
+		accumulatedDelay := time.Duration(0)
 		for {
 			select {
 			case f := <-frameCh:
@@ -48,26 +58,25 @@ func main() {
 						os.Stdout.WriteString("\033[H")
 						os.Stdout.WriteString(frame)
 						delete(frameMap, nextFrame)
-						frameElapsed := time.Since(start)
+						frameElapsed := time.Since(start) + accumulatedDelay
 						if sleepDuration := frameInterval - frameElapsed; sleepDuration > 0 {
-							//time.Sleep(sleepDuration)
-							//IDK WHY time.Sleep CANT to SLEEP Accrate TIME
-							end := time.Now().Add(sleepDuration - offset)
+							end := time.Now().Add(sleepDuration)
 							for time.Now().Before(end) {
 								// busy wait
 							}
+							accumulatedDelay = 0
+						} else {
+							accumulatedDelay = -sleepDuration
 						}
 						frameSpeed := 1e6 / float64(time.Since(start).Microseconds())
-						var builder strings.Builder
-						builder.WriteString("Frame Speed: ")
-						builder.WriteString(strconv.FormatFloat(frameSpeed, 'f', 2, 64))
-						builder.WriteString(" fps, Current Frame: ")
-						builder.WriteString(strconv.FormatInt(int64(nextFrame), 10))
-						os.Stdout.WriteString(builder.String())
+						os.Stdout.WriteString("Frame Speed: ")
+						os.Stdout.WriteString(strconv.FormatFloat(frameSpeed, 'f', 2, 64))
+						os.Stdout.WriteString(" fps, Current Frame: ")
+						os.Stdout.WriteString(strconv.FormatInt(int64(nextFrame), 10))
 						start = time.Now()
 						nextFrame++
 					} else {
-						if nextFrame >= 6301 {
+						if int64(nextFrame) >= *videoImgSize+1 {
 							close(quitCh)
 						}
 						break
@@ -79,27 +88,25 @@ func main() {
 		}
 	}()
 
-	sem := make(chan struct{}, 16)
+	sem := make(chan struct{}, *renderPoolSize)
 
 	var charWidth float64 = term.GetCharWidth()
-	for i := 1; i <= 6300; i++ {
+	for i := 1; int64(i) <= *videoImgSize; i++ {
 		wg.Add(1)
 		sem <- struct{}{} // Acquire a slot
 		go func(i int) {
 			defer wg.Done()
 			defer func() { <-sem }() // Release the slot
-			inputPath := "1/" + strconv.Itoa(i) + ".png"
+			inputPath := *videoImgPath + "/" + strconv.Itoa(i) + ".png"
 			inputFile, err := os.Open(inputPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error opening file: %v\n", err)
-				return
+				panic(fmt.Sprintf("Error opening file: %v\n", err))
 			}
 
-			img, err := png.Decode(inputFile)
+			img, _, err := image.Decode(inputFile)
 			inputFile.Close()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error decoding image: %v\n", err)
-				return
+				panic(fmt.Sprintf("Error decoding image: %v\n", err))
 			}
 			s := asciiconvertor.ConverImage2Ascii(img, w, h-2, charWidth)
 

@@ -1,7 +1,7 @@
 # Video ASCII Player
 ## 如何使用
 1. 将代码克隆到本地
-2. 安装**[Go](https://golang.google.cn/doc/install)** 和 **FFmpeg**并设置好Path
+2. 安装 **[Go](https://golang.google.cn/doc/install)** 和 **FFmpeg**并设置好Path
     - **中国用户可能需要设置代理 [goproxy.io](https://goproxy.io/zh/)**
 3. 构建可执行文件
     - 打开终端, 执行以下命令

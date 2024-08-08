@@ -18,10 +18,10 @@ import (
 )
 
 func main() {
-	var frameBufferSize = flag.Int("fs", 120, "The Size of frame buffer [Recommended above 120]")
-	var videoImgPath = flag.String("vp", "", "The Path of Stroage Video Every Frame Images")
-	var videoImgSize = flag.Int64("vs", -1, "The Count of Frame Image [From 0 to Your setting]")
-	var renderPoolSize = flag.Int("r", 16, "Render Pool Size")
+	var frameBufferSize = flag.Int("buffer", 120, "The Size of frame buffer [Recommended above 120]")
+	var videoImgPath = flag.String("path", "", "The Path of Stroage Video Every Frame Images")
+	var videoImgSize = flag.Int64("count", -1, "The Count of Frame Image [From 0 to Your setting]")
+	var renderPoolSize = flag.Int("pool", 16, "Render Pool Size")
 	var targetFramePreSecond = flag.Int("fps", 30, "Target FPS")
 	flag.Parse()
 	if *videoImgPath == "" || *videoImgSize <= 0 || *frameBufferSize <= 1 || *renderPoolSize <= 0 || *targetFramePreSecond <= 0 {
